@@ -1,9 +1,11 @@
 ﻿namespace Sitecore.Support.XA.Feature.SiteMetadata.Sitemap
 {
   using Sitecore.Data.Items;
+  using Sitecore.Globalization;
   using Sitecore.XA.Feature.SiteMetadata.Sitemap;
   using System.Collections.Generic;
   using System.Collections.Specialized;
+  using System.Linq;
   using System.Text;
   using System.Threading.Tasks;
   using System.Xml;
@@ -25,7 +27,9 @@
         });
         task.Start();
       }
-      HashSet<Item> childrenTree = ChildrenSearch(homeItem);
+      #region Modified code
+      List<Item> childrenTree = ChildrenSearch(homeItem);
+      #endregion
       StringBuilder stringBuilder = BuildSitemap(childrenTree, sitemapLinkOptions);
       task?.Wait();
       if (externalXmls != null && externalXmls.Count > 0)
@@ -36,24 +40,32 @@
       }
       return FixEncoding(stringBuilder);
     }
-
-    protected override HashSet<Item> ChildrenSearch(Item homeItem)
+    #region Modified code
+    protected virtual new List<Item> ChildrenSearch(Item homeItem)
     {
-      HashSet<Item> hashSet = new HashSet<Item>();
+      List<Item> list = new List<Item>();
       Queue<Item> queue = new Queue<Item>();
       if (homeItem.HasChildren)
       {
         queue.Enqueue(homeItem);
-        hashSet.Add(homeItem);
+        if (homeItem.Versions.Count > 0)
+        {
+          list.Add(homeItem);
+        }
+        list.AddRange(GetItemsForOtherLanguages(homeItem));
         while (queue.Count != 0)
         {
           foreach (Item child in queue.Dequeue().Children)
           {
-            if (!hashSet.Contains(child))
+            if (!list.Contains(child))
             {
               if (!ShouldBeSkipped(child))
               {
-                hashSet.Add(child);
+                if (child.Versions.Count > 0)
+                {
+                  list.Add(child);
+                }
+                list.AddRange(GetItemsForOtherLanguages(child));
               }
               if (child.HasChildren)
               {
@@ -63,8 +75,23 @@
           }
         }
       }
-      return hashSet;
+      return list;
     }
-    
+    #endregion
+    #region Added code
+    protected virtual IEnumerable<Item> GetItemsForOtherLanguages(Item item)
+    {
+      foreach (Language item3 in from language in item.Languages
+                                 where language != item.Language
+                                 select language)
+      {
+        Item item2 = item.Database.GetItem(item.ID, item3);
+        if (item2.Versions.Count > 0)
+        {
+          yield return item2;
+        }
+      }
+    }
+    #endregion
   }
 }
